@@ -1,5 +1,6 @@
 'use client';
 
+import { BookAvailability } from '@book-exchange/shared';
 import { SearchX, Library } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -19,6 +20,26 @@ import { BookGrid } from './BookGrid';
 import { BookGridSkeleton } from './BookGridSkeleton';
 import { SortSelect } from './SortSelect';
 
+interface FilterCheckboxProps {
+  label: string;
+  checked: boolean;
+  onChange: (isChecked: boolean) => void;
+}
+
+function FilterCheckbox({ label, checked, onChange }: FilterCheckboxProps) {
+  return (
+    <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-slate-700">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="size-4 rounded border-slate-300 accent-accent-600"
+      />
+      {label}
+    </label>
+  );
+}
+
 export function BooksCatalog({ params }: { params: BookCatalogParams }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -32,6 +53,7 @@ export function BooksCatalog({ params }: { params: BookCatalogParams }) {
       page: params.page,
       limit: BOOKS_PAGE_SIZE,
       excludeOwnerId: params.hideMine && user ? user.id : undefined,
+      availability: params.showExchanged ? BookAvailability.ALL : undefined,
     },
     isClient,
   );
@@ -45,11 +67,11 @@ export function BooksCatalog({ params }: { params: BookCatalogParams }) {
     updateParams({ search, page: 1 }),
   );
 
-  const hasFilters = params.search !== '' || params.hideMine;
+  const hasFilters = params.search !== '' || params.hideMine || params.showExchanged;
 
   function resetFilters() {
     setSearchInput('');
-    updateParams({ search: '', hideMine: false, page: 1 });
+    updateParams({ search: '', hideMine: false, showExchanged: false, page: 1 });
   }
 
   return (
@@ -64,17 +86,20 @@ export function BooksCatalog({ params }: { params: BookCatalogParams }) {
         <SortSelect value={params.sort} onChange={(sort) => updateParams({ sort, page: 1 })} />
       </div>
 
-      {isClient && user && (
-        <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
+      <div className="flex flex-wrap gap-x-6 gap-y-2">
+        <FilterCheckbox
+          label="Показувати обміняні"
+          checked={params.showExchanged}
+          onChange={(showExchanged) => updateParams({ showExchanged, page: 1 })}
+        />
+        {isClient && user && (
+          <FilterCheckbox
+            label="Приховати мої книги"
             checked={params.hideMine}
-            onChange={(event) => updateParams({ hideMine: event.target.checked, page: 1 })}
-            className="size-4 rounded border-slate-300 accent-accent-600"
+            onChange={(hideMine) => updateParams({ hideMine, page: 1 })}
           />
-          Приховати мої книги
-        </label>
-      )}
+        )}
+      </div>
 
       {isPending && <BookGridSkeleton />}
 

@@ -3,6 +3,7 @@ import { apiClient } from '@/lib/api-client';
 
 interface CreateExchangeRequestInput {
   bookId: string;
+  offeredBookIds: string[];
   message?: string;
 }
 

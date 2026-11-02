@@ -1,12 +1,12 @@
 'use client';
 
-import type { Book } from '@book-exchange/shared';
+import { BookStatus, type Book } from '@book-exchange/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { cn } from '@/lib/cn';
+import { getTabPanelProps, Tabs } from '@/components/ui/Tabs';
 import { ACCEPTED_IMAGE_TYPES, useImageUpload } from '@/lib/use-image-upload';
 import type { BookInput } from '../api';
 import { bookFormSchema, type BookFormValues } from '../schemas';
@@ -14,11 +14,10 @@ import { BookCover } from './BookCover';
 
 type CoverSource = 'file' | 'url';
 
-const COVER_PANEL_ID = 'cover-panel';
-
-const COVER_SOURCE_TABS: ReadonlyArray<{ source: CoverSource; label: string }> = [
-  { source: 'file', label: 'Файл' },
-  { source: 'url', label: 'URL' },
+const COVER_TABS_ID = 'cover';
+const COVER_SOURCE_TABS: ReadonlyArray<{ value: CoverSource; label: string }> = [
+  { value: 'file', label: 'Файл' },
+  { value: 'url', label: 'URL' },
 ];
 
 interface BookFormProps {
@@ -38,6 +37,7 @@ function isHttpUrl(value: string): boolean {
 
 export function BookForm({ book, isSubmitting, onSubmit, onCancel }: BookFormProps) {
   const [coverSource, setCoverSource] = useState<CoverSource>(book?.photoUrl ? 'url' : 'file');
+  const [isAvailable, setIsAvailable] = useState(book?.status !== BookStatus.EXCHANGED);
   const coverUpload = useImageUpload();
 
   const {
@@ -59,12 +59,17 @@ export function BookForm({ book, isSubmitting, onSubmit, onCancel }: BookFormPro
   function submit(values: BookFormValues) {
     const hasNewUrl =
       coverSource === 'url' && values.photoUrl && values.photoUrl !== book?.photoUrl;
+    const hasStatusChanged =
+      book !== undefined && isAvailable !== (book.status === BookStatus.AVAILABLE);
 
     onSubmit({
       name: values.name,
       author: values.author,
       ...(hasNewUrl && { photoUrl: values.photoUrl }),
       ...(coverSource === 'file' && coverUpload.file && { photo: coverUpload.file }),
+      ...(hasStatusChanged && {
+        status: isAvailable ? BookStatus.AVAILABLE : BookStatus.EXCHANGED,
+      }),
     });
   }
 
@@ -82,31 +87,13 @@ export function BookForm({ book, isSubmitting, onSubmit, onCancel }: BookFormPro
 
       <div className="space-y-2">
         <span className="block text-sm font-medium text-slate-700">Обкладинка (необовʼязково)</span>
-        <div
-          role="tablist"
-          aria-label="Джерело обкладинки"
-          className="flex gap-1 rounded-lg bg-slate-100 p-1"
-        >
-          {COVER_SOURCE_TABS.map(({ source, label }) => (
-            <button
-              key={source}
-              type="button"
-              role="tab"
-              id={`cover-tab-${source}`}
-              aria-controls={COVER_PANEL_ID}
-              aria-selected={coverSource === source}
-              onClick={() => setCoverSource(source)}
-              className={cn(
-                'flex-1 rounded-md px-3 py-1.5 text-sm font-medium',
-                coverSource === source
-                  ? 'bg-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          idPrefix={COVER_TABS_ID}
+          label="Джерело обкладинки"
+          tabs={COVER_SOURCE_TABS}
+          value={coverSource}
+          onChange={setCoverSource}
+        />
 
         <div className="flex items-start gap-4">
           <BookCover
@@ -115,12 +102,7 @@ export function BookForm({ book, isSubmitting, onSubmit, onCancel }: BookFormPro
             sizes="112px"
             className="w-20 shrink-0 sm:w-28"
           />
-          <div
-            id={COVER_PANEL_ID}
-            role="tabpanel"
-            aria-labelledby={`cover-tab-${coverSource}`}
-            className="min-w-0 flex-1"
-          >
+          <div {...getTabPanelProps(COVER_TABS_ID, coverSource)} className="min-w-0 flex-1">
             {coverSource === 'file' ? (
               <div className="space-y-1.5">
                 <input
@@ -145,6 +127,23 @@ export function BookForm({ book, isSubmitting, onSubmit, onCancel }: BookFormPro
           </div>
         </div>
       </div>
+
+      {book && (
+        <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={isAvailable}
+            onChange={(event) => setIsAvailable(event.target.checked)}
+            className="mt-0.5 size-4 rounded border-slate-300 accent-accent-600"
+          />
+          <span>
+            Доступна для обміну
+            <span className="block text-xs text-slate-500">
+              Зніміть позначку, якщо книга вже обміняна: вона зникне з каталогу.
+            </span>
+          </span>
+        </label>
+      )}
 
       <div className="flex justify-end gap-2 pt-2">
         <Button variant="secondary" onClick={onCancel} disabled={isSubmitting}>

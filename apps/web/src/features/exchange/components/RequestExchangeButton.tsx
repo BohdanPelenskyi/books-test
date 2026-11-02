@@ -1,6 +1,6 @@
 'use client';
 
-import { ExchangeStatus, type Book } from '@book-exchange/shared';
+import { BookStatus, ExchangeStatus, type Book } from '@book-exchange/shared';
 import Link from 'next/link';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/Badge';
@@ -19,6 +19,10 @@ export function RequestExchangeButton({ book }: { book: Book }) {
 
   if (!isClient) {
     return <Skeleton className="h-10 w-48" />;
+  }
+
+  if (book.status === BookStatus.EXCHANGED) {
+    return <Badge variant="neutral">Книга вже обміняна</Badge>;
   }
 
   if (!user) {

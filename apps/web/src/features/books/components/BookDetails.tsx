@@ -1,13 +1,21 @@
 'use client';
 
-import { ArrowLeft, BookX } from 'lucide-react';
+import { BookStatus, Role } from '@book-exchange/shared';
+import { ArrowLeft, BookX, Trash2 } from 'lucide-react';
 import Link from 'next/link';
-import { getButtonClasses } from '@/components/ui/Button';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { Badge } from '@/components/ui/Badge';
+import { Button, getButtonClasses } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { useDeleteBookAsAdmin } from '@/features/admin/hooks';
+import { RequestExchangeButton } from '@/features/exchange/components/RequestExchangeButton';
 import { getApiErrorStatus } from '@/lib/api-error';
 import { formatDate } from '@/lib/format-date';
-import { RequestExchangeButton } from '@/features/exchange/components/RequestExchangeButton';
+import { useIsClient } from '@/lib/use-is-client';
+import { useAuthStore } from '@/stores/auth.store';
 import { useBook } from '../hooks';
 import { BookCover } from './BookCover';
 
@@ -32,7 +40,18 @@ function BookDetailsSkeleton() {
 }
 
 export function BookDetails({ id }: { id: string }) {
+  const router = useRouter();
+  const isClient = useIsClient();
+  const user = useAuthStore((state) => state.user);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const { data: book, isPending, isError, error } = useBook(id);
+  const deleteBook = useDeleteBookAsAdmin();
+
+  const isAdmin = isClient && user?.role === Role.ADMIN;
+
+  function confirmDelete() {
+    deleteBook.mutate(id, { onSuccess: () => router.replace('/books') });
+  }
 
   return (
     <div className="space-y-6">
@@ -76,6 +95,11 @@ export function BookDetails({ id }: { id: string }) {
             <div>
               <h1 className="text-2xl font-semibold sm:text-3xl">{book.name}</h1>
               <p className="mt-1 text-lg text-slate-600">{book.author}</p>
+              {book.status === BookStatus.EXCHANGED && (
+                <Badge variant="neutral" className="mt-2">
+                  Обміняно
+                </Badge>
+              )}
             </div>
             <dl className="space-y-1 text-sm">
               <div className="flex gap-2">
@@ -87,10 +111,28 @@ export function BookDetails({ id }: { id: string }) {
                 <dd className="font-medium">{formatDate(book.createdAt)}</dd>
               </div>
             </dl>
-            <RequestExchangeButton book={book} />
+            <div className="flex flex-wrap items-center gap-3">
+              <RequestExchangeButton book={book} />
+              {isAdmin && (
+                <Button variant="danger" onClick={() => setIsDeleteDialogOpen(true)}>
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  Видалити як адмін
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={isDeleteDialogOpen}
+        title="Видалити книгу?"
+        description={`Книгу «${book?.name ?? ''}» буде видалено разом з обкладинкою. Цю дію не можна скасувати.`}
+        confirmLabel="Видалити"
+        isLoading={deleteBook.isPending}
+        onConfirm={confirmDelete}
+        onCancel={() => setIsDeleteDialogOpen(false)}
+      />
     </div>
   );
 }

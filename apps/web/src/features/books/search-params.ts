@@ -6,11 +6,12 @@ export interface BookCatalogParams {
   sort: BookSort;
   page: number;
   hideMine: boolean;
+  showExchanged: boolean;
 }
 
 export type RawSearchParams = Record<string, string | string[] | undefined>;
 
-const HIDE_MINE_VALUE = '1';
+const FLAG_ON = '1';
 
 function firstValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -28,17 +29,25 @@ export function parseCatalogParams(raw: RawSearchParams): BookCatalogParams {
     search: firstValue(raw.search)?.trim() ?? '',
     sort: sort ?? BookSort.NEWEST,
     page: parsePageParam(raw.page),
-    hideMine: firstValue(raw.hideMine) === HIDE_MINE_VALUE,
+    hideMine: firstValue(raw.hideMine) === FLAG_ON,
+    showExchanged: firstValue(raw.showExchanged) === FLAG_ON,
   };
 }
 
 /** Builds a query string that omits default values to keep URLs short. */
-export function buildCatalogQuery({ search, sort, page, hideMine }: BookCatalogParams): string {
+export function buildCatalogQuery({
+  search,
+  sort,
+  page,
+  hideMine,
+  showExchanged,
+}: BookCatalogParams): string {
   const query = new URLSearchParams();
   if (search) query.set('search', search);
   if (sort !== BookSort.NEWEST) query.set('sort', sort);
   if (page > 1) query.set('page', String(page));
-  if (hideMine) query.set('hideMine', HIDE_MINE_VALUE);
+  if (hideMine) query.set('hideMine', FLAG_ON);
+  if (showExchanged) query.set('showExchanged', FLAG_ON);
 
   const queryString = query.toString();
   return queryString ? `?${queryString}` : '';

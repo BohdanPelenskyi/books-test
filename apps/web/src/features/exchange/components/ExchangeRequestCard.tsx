@@ -20,7 +20,7 @@ const COVER_SIZES = '80px';
 
 export function ExchangeRequestCard({ request, perspective }: ExchangeRequestCardProps) {
   const { mutate: respond, isPending, variables } = useRespondToRequest();
-  const { book, requester, owner, message, status } = request;
+  const { book, offeredBooks, requester, owner, message, status } = request;
   const { label, tone } = STATUS_DISPLAY[status];
   const isPendingRequest = status === ExchangeStatus.PENDING;
   const pendingAction = isPending ? variables.action : null;
@@ -72,6 +72,13 @@ export function ExchangeRequestCard({ request, perspective }: ExchangeRequestCar
           <blockquote className="border-l-4 border-accent-100 pl-3 text-sm italic text-slate-600">
             {message}
           </blockquote>
+        )}
+
+        {offeredBooks.length > 0 && (
+          <p className="text-sm text-slate-700">
+            <span className="text-slate-500">Пропонує:</span>{' '}
+            {offeredBooks.map((offeredBook) => offeredBook.name).join(', ')}
+          </p>
         )}
 
         <p className="text-xs text-slate-500">{formatDate(request.createdAt)}</p>

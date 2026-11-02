@@ -1,4 +1,10 @@
-import type { Book, BookSort, Paginated } from '@book-exchange/shared';
+import type {
+  Book,
+  BookAvailability,
+  BookSort,
+  BookStatus,
+  Paginated,
+} from '@book-exchange/shared';
 import { apiClient } from '@/lib/api-client';
 
 export interface BookListParams {
@@ -7,6 +13,7 @@ export interface BookListParams {
   page?: number;
   limit?: number;
   excludeOwnerId?: string;
+  availability?: BookAvailability;
 }
 
 export interface MyBooksParams {
@@ -19,14 +26,16 @@ export interface BookInput {
   author: string;
   photoUrl?: string;
   photo?: File;
+  status?: BookStatus;
 }
 
-function toFormData({ name, author, photoUrl, photo }: BookInput): FormData {
+function toFormData({ name, author, photoUrl, photo, status }: BookInput): FormData {
   const formData = new FormData();
   formData.append('name', name);
   formData.append('author', author);
   if (photoUrl) formData.append('photoUrl', photoUrl);
   if (photo) formData.append('photo', photo);
+  if (status) formData.append('status', status);
   return formData;
 }
 

@@ -9,13 +9,30 @@ describe('parseCatalogParams', () => {
       sort: BookSort.NEWEST,
       page: 1,
       hideMine: false,
+      showExchanged: false,
     });
   });
 
   it('reads valid values and trims the search text', () => {
     expect(
-      parseCatalogParams({ search: '  dune ', sort: 'name:desc', page: '3', hideMine: '1' }),
-    ).toEqual({ search: 'dune', sort: BookSort.NAME_DESC, page: 3, hideMine: true });
+      parseCatalogParams({
+        search: '  dune ',
+        sort: 'name:desc',
+        page: '3',
+        hideMine: '1',
+        showExchanged: '1',
+      }),
+    ).toEqual({
+      search: 'dune',
+      sort: BookSort.NAME_DESC,
+      page: 3,
+      hideMine: true,
+      showExchanged: true,
+    });
+  });
+
+  it('accepts sorting by author', () => {
+    expect(parseCatalogParams({ sort: 'author:asc' }).sort).toBe(BookSort.AUTHOR_ASC);
   });
 
   it('ignores an unknown sort and a malformed page', () => {
@@ -31,14 +48,26 @@ describe('parseCatalogParams', () => {
 });
 
 describe('buildCatalogQuery', () => {
+  const defaults = {
+    search: '',
+    sort: BookSort.NEWEST,
+    page: 1,
+    hideMine: false,
+    showExchanged: false,
+  };
+
   it('omits defaults to keep URLs short', () => {
-    expect(buildCatalogQuery({ search: '', sort: BookSort.NEWEST, page: 1, hideMine: false })).toBe(
-      '',
-    );
+    expect(buildCatalogQuery(defaults)).toBe('');
   });
 
   it('round-trips with parseCatalogParams', () => {
-    const params = { search: 'war & peace', sort: BookSort.NAME_ASC, page: 2, hideMine: true };
+    const params = {
+      search: 'war & peace',
+      sort: BookSort.AUTHOR_ASC,
+      page: 2,
+      hideMine: true,
+      showExchanged: true,
+    };
     const query = new URLSearchParams(buildCatalogQuery(params));
 
     expect(parseCatalogParams(Object.fromEntries(query))).toEqual(params);

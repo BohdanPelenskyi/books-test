@@ -1,8 +1,9 @@
 'use client';
 
-import type { Book } from '@book-exchange/shared';
+import { BookStatus, type Book } from '@book-exchange/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Button, getButtonClasses } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
@@ -24,6 +25,8 @@ function RequestExchangeForm({ book, onClose }: Omit<RequestExchangeModalProps, 
     limit: MY_BOOKS_PREVIEW_LIMIT,
   });
   const { mutate: sendRequest, isPending: isSending } = useCreateExchangeRequest();
+  // null means "nothing was changed yet", i.e. every available book is offered.
+  const [chosenIds, setChosenIds] = useState<string[] | null>(null);
   const {
     register,
     handleSubmit,
@@ -33,39 +36,69 @@ function RequestExchangeForm({ book, onClose }: Omit<RequestExchangeModalProps, 
     defaultValues: { message: '' },
   });
 
-  const hasNoBooks = myBooks?.meta.total === 0;
+  const availableBooks =
+    myBooks?.items.filter(({ status }) => status === BookStatus.AVAILABLE) ?? [];
+  const offeredIds = chosenIds ?? availableBooks.map(({ id }) => id);
+  const hasNoBooks = myBooks !== undefined && availableBooks.length === 0;
+
+  function toggleBook(id: string) {
+    setChosenIds(
+      offeredIds.includes(id)
+        ? offeredIds.filter((offeredId) => offeredId !== id)
+        : [...offeredIds, id],
+    );
+  }
 
   function submit({ message }: ExchangeRequestFormValues) {
-    sendRequest({ bookId: book.id, message: message || undefined }, { onSuccess: onClose });
+    sendRequest(
+      { bookId: book.id, offeredBookIds: offeredIds, message: message || undefined },
+      { onSuccess: onClose },
+    );
   }
 
   return (
     <form onSubmit={handleSubmit(submit)} noValidate className="space-y-4">
       <p className="text-sm text-slate-600">
-        Ви хочете отримати «{book.name}». Власнику прийде лист з вашими контактами та списком книг,
-        які ви пропонуєте:
+        Ви хочете отримати «{book.name}». Власнику прийде лист з вашими контактами та книгами, які
+        ви оберете для обміну:
       </p>
 
       {isLoadingBooks && <Skeleton className="h-24 w-full" />}
 
       {hasNoBooks && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <p>Щоб запросити обмін, додайте хоча б одну свою книгу.</p>
+          <p>Щоб запросити обмін, додайте хоча б одну свою доступну книгу.</p>
           <Link href="/me/books" className="mt-2 inline-block font-medium underline">
             Додати книгу
           </Link>
         </div>
       )}
 
-      {myBooks && myBooks.items.length > 0 && (
-        <ul className="max-h-48 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
-          {myBooks.items.map((myBook) => (
-            <li key={myBook.id} className="px-3 py-2 text-sm">
-              <span className="font-medium">{myBook.name}</span>
-              <span className="text-slate-500"> — {myBook.author}</span>
-            </li>
-          ))}
-        </ul>
+      {availableBooks.length > 0 && (
+        <fieldset>
+          <legend className="sr-only">Книги, які ви пропонуєте</legend>
+          <ul className="max-h-48 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
+            {availableBooks.map((myBook) => (
+              <li key={myBook.id}>
+                <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-slate-50">
+                  <input
+                    type="checkbox"
+                    checked={offeredIds.includes(myBook.id)}
+                    onChange={() => toggleBook(myBook.id)}
+                    className="size-4 rounded border-slate-300 accent-accent-600"
+                  />
+                  <span className="min-w-0">
+                    <span className="font-medium">{myBook.name}</span>
+                    <span className="text-slate-500"> — {myBook.author}</span>
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          {offeredIds.length === 0 && (
+            <p className="mt-1.5 text-sm text-red-600">Оберіть хоча б одну книгу</p>
+          )}
+        </fieldset>
       )}
 
       <Textarea
@@ -85,7 +118,11 @@ function RequestExchangeForm({ book, onClose }: Omit<RequestExchangeModalProps, 
             Мої книги
           </Link>
         ) : (
-          <Button type="submit" isLoading={isSending} disabled={isLoadingBooks}>
+          <Button
+            type="submit"
+            isLoading={isSending}
+            disabled={isLoadingBooks || offeredIds.length === 0}
+          >
             Надіслати
           </Button>
         )}
