@@ -10,7 +10,15 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+  ApiOkResponse,
+} from '@nestjs/swagger';
+import { ProfileResponseDto } from './dto/user-response.dto';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { imageUploadOptions } from '../uploads/image-upload.options';
@@ -30,6 +38,7 @@ export class UsersController {
 
   @Get()
   @ApiOperation({ summary: 'My profile with book and exchange counters' })
+  @ApiOkResponse({ type: ProfileResponseDto })
   getProfile(@CurrentUser() user: PublicUser): Promise<ProfileResponse> {
     return this.profileService.getProfile(user.id);
   }
@@ -48,6 +57,7 @@ export class UsersController {
     },
   })
   @ApiOperation({ summary: 'Update name, email and avatar' })
+  @ApiOkResponse({ type: ProfileResponseDto })
   updateProfile(
     @CurrentUser() user: PublicUser,
     @Body() dto: UpdateProfileDto,

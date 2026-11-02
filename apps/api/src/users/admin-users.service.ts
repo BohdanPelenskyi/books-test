@@ -86,7 +86,11 @@ export class AdminUsersService {
     const passwordHash = password ? await hash(password, BCRYPT_ROUNDS) : undefined;
     const user = await this.prisma.user.update({
       where: { id },
-      data: { ...profile, passwordHash },
+      data: {
+        ...profile,
+        passwordHash,
+        ...(passwordHash && { tokenVersion: { increment: 1 } }),
+      },
       select: ADMIN_USER_SELECT,
     });
 

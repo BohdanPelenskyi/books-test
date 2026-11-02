@@ -23,14 +23,16 @@ describe('AuthService', () => {
     findWithCredentialsByEmail: jest.fn(),
     createUser: jest.fn(),
   };
+  const jwtService = { signAsync: jest.fn() };
 
   beforeEach(async () => {
     jest.resetAllMocks();
+    jwtService.signAsync.mockResolvedValue('token');
     const moduleRef = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: UsersService, useValue: usersService },
-        { provide: JwtService, useValue: { signAsync: jest.fn().mockResolvedValue('token') } },
+        { provide: JwtService, useValue: jwtService },
       ],
     }).compile();
 
@@ -80,11 +82,18 @@ describe('AuthService', () => {
       ).rejects.toBeInstanceOf(UnauthorizedException);
     });
 
-    it('returns a token and a user without passwordHash for valid credentials', async () => {
+    it('puts the token version into the token and keeps it out of the response', async () => {
       const passwordHash = await hash(PASSWORD, BCRYPT_ROUNDS);
-      usersService.findWithCredentialsByEmail.mockResolvedValue({ ...publicUser, passwordHash });
+      usersService.findWithCredentialsByEmail.mockResolvedValue({
+        ...publicUser,
+        passwordHash,
+        tokenVersion: 3,
+      });
 
       const result = await authService.login({ email: publicUser.email, password: PASSWORD });
+
+      expect(jwtService.signAsync).toHaveBeenCalledWith(expect.objectContaining({ tv: 3 }));
+      expect(result.user).not.toHaveProperty('tokenVersion');
 
       expect(result.user).toEqual(publicUser);
       expect(result.user).not.toHaveProperty('passwordHash');

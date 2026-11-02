@@ -13,6 +13,7 @@ interface StoredUser {
   email: string;
   passwordHash: string;
   role: 'USER' | 'ADMIN';
+  tokenVersion: number;
   avatarUrl: string | null;
   createdAt: Date;
 }
@@ -45,6 +46,7 @@ function createFakePrisma() {
           ...data,
           id: randomUUID(),
           role: 'USER',
+          tokenVersion: 0,
           avatarUrl: null,
           createdAt: new Date(),
         };

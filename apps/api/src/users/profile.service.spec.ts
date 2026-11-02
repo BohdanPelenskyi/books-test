@@ -25,6 +25,7 @@ describe('ProfileService', () => {
     exchangeRequest: { count: jest.fn() },
   };
   const storage = {
+    assertIsImage: jest.fn(),
     getPublicUrl: jest.fn(),
     deleteByUrl: jest.fn(),
     discardUploadedFile: jest.fn(),

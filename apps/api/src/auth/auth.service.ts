@@ -10,6 +10,7 @@ import { RegisterDto } from './dto/register.dto';
 import type { AuthResponseDto } from './dto/auth-response.dto';
 import type { JwtPayload } from './jwt-payload';
 
+const INITIAL_TOKEN_VERSION = 0;
 const INVALID_CREDENTIALS_MESSAGE = 'Невірний email або пароль';
 // Compared against when the email is unknown so that response time does not reveal it.
 const UNKNOWN_USER_PASSWORD_HASH = hashSync(randomBytes(16).toString('hex'), BCRYPT_ROUNDS);
@@ -30,7 +31,7 @@ export class AuthService {
     const passwordHash = await hash(password, BCRYPT_ROUNDS);
     const user = await this.usersService.createUser({ name, email, passwordHash });
 
-    return this.buildAuthResponse(user);
+    return this.buildAuthResponse(user, INITIAL_TOKEN_VERSION);
   }
 
   async login({ email, password }: LoginDto): Promise<AuthResponseDto> {
@@ -40,16 +41,19 @@ export class AuthService {
       throw new UnauthorizedException(INVALID_CREDENTIALS_MESSAGE);
     }
 
-    const { passwordHash, ...user } = userWithCredentials;
+    const { passwordHash, tokenVersion, ...user } = userWithCredentials;
     if (!(await compare(password, passwordHash))) {
       throw new UnauthorizedException(INVALID_CREDENTIALS_MESSAGE);
     }
 
-    return this.buildAuthResponse(user);
+    return this.buildAuthResponse(user, tokenVersion);
   }
 
-  private async buildAuthResponse(user: PublicUser): Promise<AuthResponseDto> {
-    const payload: JwtPayload = { sub: user.id, role: user.role };
+  private async buildAuthResponse(
+    user: PublicUser,
+    tokenVersion: number,
+  ): Promise<AuthResponseDto> {
+    const payload: JwtPayload = { sub: user.id, role: user.role, tv: tokenVersion };
 
     return { accessToken: await this.jwtService.signAsync(payload), user };
   }

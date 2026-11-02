@@ -65,6 +65,9 @@ export class ProfileService {
     avatar?: Express.Multer.File,
   ): Promise<ProfileResponse> {
     try {
+      if (avatar) {
+        await this.storage.assertIsImage(avatar);
+      }
       const currentUser = await this.findCurrentUser(userId);
       if (email && email !== currentUser.email) {
         await this.assertEmailIsFree(email);
@@ -105,7 +108,10 @@ export class ProfileService {
     }
 
     const passwordHash = await hash(newPassword, BCRYPT_ROUNDS);
-    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash, tokenVersion: { increment: 1 } },
+    });
   }
 
   private async findCurrentUser(

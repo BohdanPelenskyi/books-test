@@ -86,7 +86,7 @@ export class PasswordResetService {
       }
       await transaction.user.update({
         where: { id: resetToken.userId },
-        data: { passwordHash },
+        data: { passwordHash, tokenVersion: { increment: 1 } },
       });
     });
   }

@@ -20,11 +20,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate({ sub }: JwtPayload): Promise<PublicUser> {
-    const user = await this.usersService.findPublicById(sub);
+  async validate({ sub, tv }: JwtPayload): Promise<PublicUser> {
+    const user = await this.usersService.findAuthStateById(sub);
     if (!user) {
       throw new UnauthorizedException();
     }
-    return user;
+
+    const { tokenVersion, ...publicUser } = user;
+    // Tokens issued before versioning existed carry no claim and count as version 0.
+    if (tokenVersion !== (tv ?? 0)) {
+      throw new UnauthorizedException();
+    }
+    return publicUser;
   }
 }

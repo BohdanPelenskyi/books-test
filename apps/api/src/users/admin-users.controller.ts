@@ -11,7 +11,15 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiTags,
+  ApiCreatedResponse,
+  ApiOkResponse,
+} from '@nestjs/swagger';
+import { AdminUserResponseDto, PaginatedAdminUsersResponseDto } from './dto/user-response.dto';
+import { PaginatedBooksResponseDto } from '../books/dto/book-response.dto';
 import { Role } from '@book-exchange/shared';
 import { BookWithOwner } from '../books/books.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -33,18 +41,21 @@ export class AdminUsersController {
 
   @Get()
   @ApiOperation({ summary: 'Search users with their book counts' })
+  @ApiOkResponse({ type: PaginatedAdminUsersResponseDto })
   findAll(@Query() query: ListUsersQueryDto): Promise<PaginatedResponse<AdminUserResponse>> {
     return this.adminUsersService.findAll(query);
   }
 
   @Post()
   @ApiOperation({ summary: 'Create a user with a given role' })
+  @ApiCreatedResponse({ type: AdminUserResponseDto })
   create(@Body() dto: CreateUserDto): Promise<AdminUserResponse> {
     return this.adminUsersService.create(dto);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update name, email, role and optionally the password' })
+  @ApiOkResponse({ type: AdminUserResponseDto })
   update(
     @CurrentUser() currentUser: PublicUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -65,6 +76,7 @@ export class AdminUsersController {
 
   @Get(':id/books')
   @ApiOperation({ summary: "List a user's books" })
+  @ApiOkResponse({ type: PaginatedBooksResponseDto })
   findBooks(
     @Param('id', ParseUUIDPipe) id: string,
     @Query() query: PaginationQueryDto,
