@@ -120,7 +120,10 @@ test.describe('books and exchanges', () => {
 
     await annaPage.goto(`/books?search=${encodeURIComponent(bookName)}`);
     await expect(annaPage.getByText('Нічого не знайдено')).toBeVisible();
-    await annaPage.getByLabel('Показувати обміняні').check();
+    // The checkbox follows the URL, so its state changes after the navigation, not on click.
+    const showExchanged = annaPage.getByLabel('Показувати обміняні');
+    await showExchanged.click();
+    await expect(showExchanged).toBeChecked();
     await expect(annaPage.getByText('Обміняно').first()).toBeVisible();
   });
 
