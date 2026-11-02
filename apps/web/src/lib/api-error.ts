@@ -2,6 +2,7 @@ import { isAxiosError } from 'axios';
 
 const DEFAULT_ERROR_MESSAGE = 'Щось пішло не так. Спробуйте ще раз';
 const INVALID_INPUT_MESSAGE = 'Перевірте правильність введених даних';
+const NETWORK_ERROR_MESSAGE = 'Не вдалося звʼязатися з сервером. Перевірте, що API запущений';
 
 // The server's own text for these statuses is not localized.
 const MESSAGE_BY_STATUS: Readonly<Record<number, string>> = {
@@ -25,7 +26,11 @@ export function getApiErrorMessage(
     return fallback;
   }
 
-  const status = error.response?.status;
+  if (!error.response) {
+    return NETWORK_ERROR_MESSAGE;
+  }
+
+  const status = error.response.status;
   if (status !== undefined && MESSAGE_BY_STATUS[status]) {
     return MESSAGE_BY_STATUS[status];
   }

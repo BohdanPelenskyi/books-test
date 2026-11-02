@@ -29,6 +29,12 @@ describe('getApiErrorMessage', () => {
     expect(getApiErrorMessage(apiError(413, { message: 'File too large' }))).toContain('2 МБ');
   });
 
+  it('explains a network failure instead of showing a generic error', () => {
+    const networkError = new AxiosError('Network Error', 'ERR_NETWORK');
+
+    expect(getApiErrorMessage(networkError)).toContain('Не вдалося звʼязатися з сервером');
+  });
+
   it('uses the fallback for errors that did not come from the API', () => {
     expect(getApiErrorMessage(new Error('boom'), 'fallback')).toBe('fallback');
   });
