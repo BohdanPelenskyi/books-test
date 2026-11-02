@@ -171,7 +171,7 @@ jobs:
 
       - name: Sign in as a seeded user
         run: |
-          curl -sf -X POST http://localhost:4000/api/auth/login \n            -H "content-type: application/json" \n            -d '{"email":"anna@example.com","password":"User123!"}' > /dev/null
+          curl -sf -X POST http://localhost:4000/api/auth/login -H 'content-type: application/json' -d '{"email":"anna@example.com","password":"User123!"}' > /dev/null
 
       - name: Show the health response
         run: curl -s http://localhost:4000/api/health
