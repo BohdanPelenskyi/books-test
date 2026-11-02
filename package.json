@@ -13,7 +13,8 @@
     "test": "pnpm build:shared && pnpm -r --if-present test",
     "format": "prettier --write .",
     "db:migrate": "pnpm --filter @book-exchange/api db:migrate",
-    "db:seed": "pnpm --filter @book-exchange/api db:seed"
+    "db:seed": "pnpm --filter @book-exchange/api db:seed",
+    "test:e2e": "pnpm --filter @book-exchange/e2e e2e"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

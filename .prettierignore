@@ -5,3 +5,6 @@ coverage
 pnpm-lock.yaml
 apps/api/prisma/migrations
 *.hbs
+
+playwright-report
+test-results
