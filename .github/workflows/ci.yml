@@ -5,8 +5,20 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  DATABASE_URL: postgresql://book_exchange:book_exchange@localhost:5432/book_exchange?schema=public
+  JWT_SECRET: ci-secret-with-enough-length-123
+  JWT_EXPIRES_IN: 7d
+  WEB_URL: http://localhost:3000
+  API_PUBLIC_URL: http://localhost:4000
+  SMTP_HOST: localhost
+  SMTP_PORT: '1025'
+  MAIL_FROM: Book Exchange <no-reply@book-exchange.local>
+  NEXT_PUBLIC_API_URL: http://localhost:4000/api
+
 jobs:
   verify:
+    name: Lint, typecheck, unit and API tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -26,15 +38,11 @@ jobs:
           --health-retries 10
 
     env:
-      DATABASE_URL: postgresql://book_exchange:book_exchange@localhost:5432/book_exchange?schema=public
       E2E_DATABASE_URL: postgresql://book_exchange:book_exchange@localhost:5432/book_exchange?schema=public
-      NEXT_PUBLIC_API_URL: http://localhost:4000/api
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -42,6 +50,8 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
       - name: Lint
         run: pnpm lint
@@ -52,8 +62,107 @@ jobs:
       - name: Apply database migrations
         run: pnpm --filter @book-exchange/api exec prisma migrate deploy
 
-      - name: Test (unit and e2e)
+      - name: Test (unit and API end-to-end on PostgreSQL)
         run: pnpm test
 
       - name: Build
         run: pnpm build
+
+  browser:
+    name: Browser end-to-end (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: book_exchange
+          POSTGRES_PASSWORD: book_exchange
+          POSTGRES_DB: book_exchange
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U book_exchange"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      # The tests sign in many times in a row, which the login rate limit would reject.
+      DISABLE_RATE_LIMITING: 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+      - name: Install the browser
+        run: pnpm --filter @book-exchange/e2e exec playwright install --with-deps chromium
+
+      - name: Build
+        run: pnpm build
+
+      - name: Prepare the database
+        run: |
+          pnpm --filter @book-exchange/api exec prisma migrate deploy
+          pnpm --filter @book-exchange/api exec prisma db seed
+
+      - name: Start the API and the web
+        run: |
+          pnpm --filter @book-exchange/api start > api.log 2>&1 &
+          pnpm --filter @book-exchange/web start > web.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            curl -sf http://localhost:4000/api/health > /dev/null && curl -sf http://localhost:3000/books > /dev/null && exit 0
+            sleep 2
+          done
+          echo "The stack did not start in time"; cat api.log web.log; exit 1
+
+      - name: Run the browser tests
+        run: pnpm test:e2e
+
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+            api.log
+            web.log
+
+  docker:
+    name: Docker images and compose stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start the stack
+        run: docker compose --profile app up -d --build
+
+      - name: Wait for the API and the web
+        run: |
+          for attempt in $(seq 1 60); do
+            curl -sf http://localhost:4000/api/health && curl -sf -o /dev/null http://localhost:3000/books && exit 0
+            sleep 3
+          done
+          docker compose --profile app logs
+          exit 1
+
+      - name: Show the health response
+        run: curl -s http://localhost:4000/api/health
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose --profile app down -v
