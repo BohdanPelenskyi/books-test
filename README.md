@@ -48,7 +48,7 @@
 
 ## Швидкий старт
 
-Потрібні Node.js 20+, pnpm і Docker.
+Потрібні Node.js 22.13+, pnpm і Docker.
 
 ```bash
 cp apps/api/.env.example apps/api/.env
