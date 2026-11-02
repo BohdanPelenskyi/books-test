@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum ExchangeStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+}
+
+model User {
+  id                  String               @id @default(uuid())
+  name                String
+  email               String               @unique
+  passwordHash        String
+  role                Role                 @default(USER)
+  avatarUrl           String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  books               Book[]
+  sentRequests        ExchangeRequest[]    @relation("SentRequests")
+  receivedRequests    ExchangeRequest[]    @relation("ReceivedRequests")
+  passwordResetTokens PasswordResetToken[]
+}
+
+model Book {
+  id               String            @id @default(uuid())
+  name             String
+  author           String
+  photoUrl         String?
+  ownerId          String
+  owner            User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt        DateTime          @default(now())
+  exchangeRequests ExchangeRequest[]
+
+  @@index([name])
+  @@index([author])
+  @@index([ownerId])
+}
+
+model ExchangeRequest {
+  id          String         @id @default(uuid())
+  bookId      String
+  book        Book           @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  requesterId String
+  requester   User           @relation("SentRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+  ownerId     String
+  owner       User           @relation("ReceivedRequests", fields: [ownerId], references: [id], onDelete: Cascade)
+  message     String?
+  status      ExchangeStatus @default(PENDING)
+  createdAt   DateTime       @default(now())
+
+  @@index([ownerId, status])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+}
