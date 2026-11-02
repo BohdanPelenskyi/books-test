@@ -1,0 +1,28 @@
+{
+  "name": "book-exchange",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:shared": "pnpm --filter @book-exchange/shared build",
+    "dev": "pnpm build:shared && pnpm --parallel --filter \"./apps/*\" dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm build:shared && pnpm -r typecheck",
+    "test": "pnpm build:shared && pnpm -r --if-present test",
+    "format": "prettier --write .",
+    "db:migrate": "pnpm --filter @book-exchange/api db:migrate",
+    "db:seed": "pnpm --filter @book-exchange/api db:seed"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1"
+  },
+  "packageManager": "pnpm@11.22.0"
+}
