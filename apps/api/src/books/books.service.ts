@@ -4,7 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BookAvailability } from '@book-exchange/shared';
+import { BookStatus, Prisma } from '@prisma/client';
 import {
   buildPaginationMeta,
   getPaginationSkip,
@@ -34,14 +35,16 @@ export class BooksService {
   findAll({
     search,
     excludeOwnerId,
+    availability = BookAvailability.AVAILABLE,
     sort,
     page,
     limit,
   }: ListBooksQueryDto): Promise<PaginatedResponse<BookWithOwner>> {
-    return this.findPage(buildBookWhere(search, excludeOwnerId), BOOK_ORDER_BY[sort], {
-      page,
-      limit,
-    });
+    return this.findPage(
+      buildBookWhere({ search, excludeOwnerId, availability }),
+      BOOK_ORDER_BY[sort],
+      { page, limit },
+    );
   }
 
   async findOne(id: string): Promise<BookWithOwner> {
@@ -78,7 +81,7 @@ export class BooksService {
   async update(
     userId: string,
     id: string,
-    { name, author, photoUrl }: UpdateBookDto,
+    { name, author, photoUrl, status }: UpdateBookDto,
     file?: Express.Multer.File,
   ): Promise<BookWithOwner> {
     const { book, updatedBook } = await this.withUploadCleanup(file, async () => {
@@ -86,7 +89,7 @@ export class BooksService {
       const newPhotoUrl = this.resolvePhotoUrl(photoUrl, file);
       const result = await this.prisma.book.update({
         where: { id },
-        data: { name, author, photoUrl: newPhotoUrl },
+        data: { name, author, status, photoUrl: newPhotoUrl },
         include: BOOK_WITH_OWNER_INCLUDE,
       });
       return { book: existingBook, updatedBook: result };
@@ -152,6 +155,9 @@ export class BooksService {
     operation: () => Promise<T>,
   ): Promise<T> {
     try {
+      if (file) {
+        await this.storage.assertIsImage(file);
+      }
       return await operation();
     } catch (error) {
       if (file) {
@@ -162,7 +168,17 @@ export class BooksService {
   }
 }
 
-function buildBookWhere(search?: string, excludeOwnerId?: string): Prisma.BookWhereInput {
+interface BookFilters {
+  search?: string;
+  excludeOwnerId?: string;
+  availability: BookAvailability;
+}
+
+function buildBookWhere({
+  search,
+  excludeOwnerId,
+  availability,
+}: BookFilters): Prisma.BookWhereInput {
   return {
     ...(search && {
       OR: [
@@ -171,5 +187,6 @@ function buildBookWhere(search?: string, excludeOwnerId?: string): Prisma.BookWh
       ],
     }),
     ...(excludeOwnerId && { ownerId: { not: excludeOwnerId } }),
+    ...(availability === BookAvailability.AVAILABLE && { status: BookStatus.AVAILABLE }),
   };
 }

@@ -15,6 +15,7 @@ const regularUser = {
   name: 'Anna',
   email: 'anna@example.com',
   role: 'USER',
+  tokenVersion: 0,
   avatarUrl: null,
   createdAt: new Date(),
 };

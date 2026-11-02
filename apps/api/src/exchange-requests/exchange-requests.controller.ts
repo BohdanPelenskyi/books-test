@@ -8,7 +8,14 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiTags,
+  ApiCreatedResponse,
+  ApiOkResponse,
+} from '@nestjs/swagger';
+import { ExchangeRequestResponseDto } from './dto/exchange-request-response.dto';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PublicUser } from '../users/user.select';
@@ -28,6 +35,7 @@ export class ExchangeRequestsController {
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: CREATE_THROTTLE })
   @ApiOperation({ summary: 'Request an exchange for a book; emails its owner' })
+  @ApiCreatedResponse({ type: ExchangeRequestResponseDto })
   create(
     @CurrentUser() user: PublicUser,
     @Body() dto: CreateExchangeRequestDto,
@@ -37,18 +45,21 @@ export class ExchangeRequestsController {
 
   @Get('incoming')
   @ApiOperation({ summary: 'Requests for my books' })
+  @ApiOkResponse({ type: [ExchangeRequestResponseDto] })
   findIncoming(@CurrentUser() user: PublicUser): Promise<ExchangeRequestView[]> {
     return this.exchangeRequestsService.findIncoming(user.id);
   }
 
   @Get('outgoing')
   @ApiOperation({ summary: 'Requests I have sent' })
+  @ApiOkResponse({ type: [ExchangeRequestResponseDto] })
   findOutgoing(@CurrentUser() user: PublicUser): Promise<ExchangeRequestView[]> {
     return this.exchangeRequestsService.findOutgoing(user.id);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Accept, decline (owner) or cancel (requester) a pending request' })
+  @ApiOkResponse({ type: ExchangeRequestResponseDto })
   respond(
     @CurrentUser() user: PublicUser,
     @Param('id', ParseUUIDPipe) id: string,

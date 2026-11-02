@@ -21,16 +21,18 @@ const REQUESTER = {
 const OWNER = { id: 'owner-id', name: 'Anna', email: 'anna@example.com', avatarUrl: null };
 const BOOK_ID = 'book-id';
 const REQUEST_ID = 'request-id';
+const OFFERED_BOOK_ID = 'offered-book-id';
 
 const desiredBook = {
   id: BOOK_ID,
   name: 'Dune',
   author: 'Frank Herbert',
   photoUrl: null,
+  status: 'AVAILABLE' as const,
   ownerId: OWNER.id,
   owner: OWNER,
 };
-const requesterBooks = [{ name: '1984', author: 'George Orwell' }];
+const offeredBook = { id: OFFERED_BOOK_ID, name: '1984', author: 'George Orwell', photoUrl: null };
 
 const pendingRequest = {
   id: REQUEST_ID,
@@ -40,7 +42,8 @@ const pendingRequest = {
   bookId: BOOK_ID,
   requesterId: REQUESTER.id,
   ownerId: OWNER.id,
-  book: desiredBook,
+  book: { id: BOOK_ID, name: 'Dune', author: 'Frank Herbert', photoUrl: null },
+  offeredBooks: [offeredBook],
   requester: REQUESTER,
   owner: OWNER,
 };
@@ -48,7 +51,7 @@ const pendingRequest = {
 describe('ExchangeRequestsService', () => {
   let service: ExchangeRequestsService;
   const prisma = {
-    book: { findUnique: jest.fn(), findMany: jest.fn() },
+    book: { findUnique: jest.fn(), findMany: jest.fn(), update: jest.fn() },
     exchangeRequest: {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
@@ -57,11 +60,15 @@ describe('ExchangeRequestsService', () => {
       create: jest.fn(),
       updateMany: jest.fn(),
     },
+    $transaction: jest.fn(),
   };
   const mailService = { sendExchangeRequest: jest.fn(), sendExchangeStatus: jest.fn() };
 
   beforeEach(async () => {
     jest.resetAllMocks();
+    prisma.$transaction.mockImplementation((callback: (client: typeof prisma) => unknown) =>
+      callback(prisma),
+    );
     const moduleRef = await Test.createTestingModule({
       providers: [
         ExchangeRequestsService,
@@ -74,11 +81,15 @@ describe('ExchangeRequestsService', () => {
   });
 
   describe('create', () => {
-    const dto = { bookId: BOOK_ID, message: 'Давайте обміняємось' };
+    const dto = {
+      bookId: BOOK_ID,
+      message: 'Давайте обміняємось',
+      offeredBookIds: [OFFERED_BOOK_ID],
+    };
 
     beforeEach(() => {
       prisma.book.findUnique.mockResolvedValue(desiredBook);
-      prisma.book.findMany.mockResolvedValue(requesterBooks);
+      prisma.book.findMany.mockResolvedValue([offeredBook]);
       prisma.exchangeRequest.findFirst.mockResolvedValue(null);
       prisma.exchangeRequest.create.mockResolvedValue(pendingRequest);
     });
@@ -98,12 +109,31 @@ describe('ExchangeRequestsService', () => {
       expect(prisma.exchangeRequest.create).not.toHaveBeenCalled();
     });
 
-    it('rejects a sender who has no books to offer', async () => {
+    it('rejects a request for a book that was already exchanged', async () => {
+      prisma.book.findUnique.mockResolvedValue({ ...desiredBook, status: 'EXCHANGED' });
+
+      await expect(service.create(REQUESTER, dto)).rejects.toThrow(
+        new ConflictException('Ця книга вже обміняна'),
+      );
+      expect(prisma.exchangeRequest.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a sender who has no available books to offer', async () => {
       prisma.book.findMany.mockResolvedValue([]);
 
       await expect(service.create(REQUESTER, dto)).rejects.toThrow(
         new BadRequestException('Додайте хоча б одну книгу для обміну'),
       );
+      expect(prisma.exchangeRequest.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects offering a book that is not an available book of the sender', async () => {
+      await expect(
+        service.create(REQUESTER, {
+          ...dto,
+          offeredBookIds: [OFFERED_BOOK_ID, 'someone-elses-book'],
+        }),
+      ).rejects.toThrow(new BadRequestException('Пропонувати можна лише власні доступні книги'));
       expect(prisma.exchangeRequest.create).not.toHaveBeenCalled();
     });
 
@@ -114,7 +144,12 @@ describe('ExchangeRequestsService', () => {
       expect(prisma.exchangeRequest.create).not.toHaveBeenCalled();
     });
 
-    it('saves the request and emails the owner with the sender books', async () => {
+    it('saves the offered books and emails the owner with exactly those books', async () => {
+      prisma.book.findMany.mockResolvedValue([
+        offeredBook,
+        { id: 'not-offered', name: 'Brave New World', author: 'Aldous Huxley', photoUrl: null },
+      ]);
+
       const result = await service.create(REQUESTER, dto);
 
       expect(result).toMatchObject({ id: REQUEST_ID, status: 'PENDING' });
@@ -125,6 +160,7 @@ describe('ExchangeRequestsService', () => {
             requesterId: REQUESTER.id,
             ownerId: OWNER.id,
             message: dto.message,
+            offeredBooks: { connect: [{ id: OFFERED_BOOK_ID }] },
           },
         }),
       );
@@ -134,7 +170,7 @@ describe('ExchangeRequestsService', () => {
         requesterName: REQUESTER.name,
         requesterEmail: REQUESTER.email,
         desiredBook: { name: 'Dune', author: 'Frank Herbert' },
-        requesterBooks,
+        requesterBooks: [{ name: '1984', author: 'George Orwell' }],
         message: dto.message,
       });
     });
@@ -144,11 +180,22 @@ describe('ExchangeRequestsService', () => {
 
       await expect(service.create(REQUESTER, dto)).resolves.toMatchObject({ id: REQUEST_ID });
     });
+
+    it('does not leak the owner email in the response to a new request', async () => {
+      const result = await service.create(REQUESTER, dto);
+
+      expect(result.owner.email).toBeNull();
+    });
   });
 
   describe('respond', () => {
-    let storedRequest:
-      typeof pendingRequest | (Omit<typeof pendingRequest, 'status'> & { status: string });
+    let storedRequest: Omit<typeof pendingRequest, 'status'> & { status: string };
+    const competitor = {
+      ...pendingRequest,
+      id: 'competitor-request',
+      requesterId: 'competitor-id',
+      requester: { ...REQUESTER, id: 'competitor-id', name: 'Olena', email: 'olena@example.com' },
+    };
 
     beforeEach(() => {
       storedRequest = pendingRequest;
@@ -156,10 +203,15 @@ describe('ExchangeRequestsService', () => {
       prisma.exchangeRequest.findUniqueOrThrow.mockImplementation(() =>
         Promise.resolve(storedRequest),
       );
-      prisma.exchangeRequest.updateMany.mockImplementation(({ data }: { data: object }) => {
-        storedRequest = { ...storedRequest, ...data };
-        return Promise.resolve({ count: 1 });
-      });
+      prisma.exchangeRequest.findMany.mockResolvedValue([]);
+      prisma.exchangeRequest.updateMany.mockImplementation(
+        ({ where, data }: { where: { id: unknown }; data: object }) => {
+          if (typeof where.id === 'string') {
+            storedRequest = { ...storedRequest, ...data };
+          }
+          return Promise.resolve({ count: 1 });
+        },
+      );
     });
 
     it('throws NotFoundException for an unknown request', async () => {
@@ -170,10 +222,14 @@ describe('ExchangeRequestsService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('lets the owner accept and emails the requester', async () => {
+    it('lets the owner accept, marks the book exchanged and emails the requester', async () => {
       const result = await service.respond(OWNER.id, REQUEST_ID, ExchangeAction.ACCEPT);
 
       expect(result.status).toBe('ACCEPTED');
+      expect(prisma.book.update).toHaveBeenCalledWith({
+        where: { id: BOOK_ID },
+        data: { status: 'EXCHANGED' },
+      });
       expect(mailService.sendExchangeStatus).toHaveBeenCalledWith({
         to: REQUESTER.email,
         requesterName: REQUESTER.name,
@@ -183,10 +239,31 @@ describe('ExchangeRequestsService', () => {
       });
     });
 
-    it('lets the owner decline and emails the requester', async () => {
+    it('declines the other pending requests for the same book and tells their senders', async () => {
+      prisma.exchangeRequest.findMany.mockResolvedValue([competitor]);
+
+      await service.respond(OWNER.id, REQUEST_ID, ExchangeAction.ACCEPT);
+
+      expect(prisma.exchangeRequest.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { bookId: BOOK_ID, status: 'PENDING', id: { not: REQUEST_ID } },
+        }),
+      );
+      expect(prisma.exchangeRequest.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['competitor-request'] } },
+        data: { status: 'DECLINED' },
+      });
+      expect(mailService.sendExchangeStatus).toHaveBeenCalledTimes(2);
+      expect(mailService.sendExchangeStatus).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'olena@example.com', isAccepted: false }),
+      );
+    });
+
+    it('lets the owner decline without touching the book', async () => {
       const result = await service.respond(OWNER.id, REQUEST_ID, ExchangeAction.DECLINE);
 
       expect(result.status).toBe('DECLINED');
+      expect(prisma.book.update).not.toHaveBeenCalled();
       expect(mailService.sendExchangeStatus).toHaveBeenCalledWith(
         expect.objectContaining({ isAccepted: false }),
       );
@@ -230,14 +307,8 @@ describe('ExchangeRequestsService', () => {
 
       expect(result.status).toBe('ACCEPTED');
     });
-  });
-  describe('concurrent responses', () => {
+
     it('lets only one of two simultaneous responses win and emails once', async () => {
-      prisma.exchangeRequest.findUnique.mockResolvedValue(pendingRequest);
-      prisma.exchangeRequest.findUniqueOrThrow.mockResolvedValue({
-        ...pendingRequest,
-        status: 'ACCEPTED',
-      });
       prisma.exchangeRequest.updateMany
         .mockResolvedValueOnce({ count: 1 })
         .mockResolvedValueOnce({ count: 0 });
@@ -279,17 +350,6 @@ describe('ExchangeRequestsService', () => {
 
       expect(incoming?.requester.email).toBe(REQUESTER.email);
       expect(incoming?.owner.email).toBe(OWNER.email);
-    });
-
-    it('does not leak the owner email in the response to a new request', async () => {
-      prisma.book.findUnique.mockResolvedValue(desiredBook);
-      prisma.book.findMany.mockResolvedValue(requesterBooks);
-      prisma.exchangeRequest.findFirst.mockResolvedValue(null);
-      prisma.exchangeRequest.create.mockResolvedValue(pendingRequest);
-
-      const result = await service.create(REQUESTER, { bookId: BOOK_ID });
-
-      expect(result.owner.email).toBeNull();
     });
   });
 });

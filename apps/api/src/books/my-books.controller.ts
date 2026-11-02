@@ -14,7 +14,16 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+  ApiCreatedResponse,
+  ApiOkResponse,
+} from '@nestjs/swagger';
+import { BookResponseDto, PaginatedBooksResponseDto } from './dto/book-response.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PaginatedResponse } from '../common/dto/paginated-response';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
@@ -34,6 +43,7 @@ export class MyBooksController {
 
   @Get()
   @ApiOperation({ summary: 'List my books' })
+  @ApiOkResponse({ type: PaginatedBooksResponseDto })
   findAll(
     @CurrentUser() user: PublicUser,
     @Query() query: PaginationQueryDto,
@@ -46,6 +56,7 @@ export class MyBooksController {
   @ApiConsumes('multipart/form-data')
   @ApiBody({ schema: { ...BOOK_FORM_SCHEMA, required: ['name', 'author'] } })
   @ApiOperation({ summary: 'Add a book; the cover is an optional file or URL' })
+  @ApiCreatedResponse({ type: BookResponseDto })
   create(
     @CurrentUser() user: PublicUser,
     @Body() dto: CreateBookDto,
@@ -59,6 +70,7 @@ export class MyBooksController {
   @ApiConsumes('multipart/form-data')
   @ApiBody({ schema: BOOK_FORM_SCHEMA })
   @ApiOperation({ summary: 'Update my book' })
+  @ApiOkResponse({ type: BookResponseDto })
   update(
     @CurrentUser() user: PublicUser,
     @Param('id', ParseUUIDPipe) id: string,

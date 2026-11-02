@@ -33,6 +33,7 @@ describe('BooksService', () => {
   };
   const storage = {
     getPublicUrl: jest.fn(),
+    assertIsImage: jest.fn(),
     deleteByUrl: jest.fn(),
     discardUploadedFile: jest.fn(),
   };
@@ -62,6 +63,7 @@ describe('BooksService', () => {
               { name: { contains: 'dune', mode: 'insensitive' } },
               { author: { contains: 'dune', mode: 'insensitive' } },
             ],
+            status: 'AVAILABLE',
           },
           orderBy: { name: 'asc' },
         }),
@@ -77,8 +79,19 @@ describe('BooksService', () => {
       });
 
       expect(prisma.book.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { ownerId: { not: OWNER_ID } } }),
+        expect.objectContaining({ where: { ownerId: { not: OWNER_ID }, status: 'AVAILABLE' } }),
       );
+    });
+
+    it('includes exchanged books when all availability is requested', async () => {
+      await booksService.findAll({
+        availability: 'all',
+        sort: BookSort.NEWEST,
+        page: 1,
+        limit: 12,
+      });
+
+      expect(prisma.book.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: {} }));
     });
 
     it('sorts alphabetically by author', async () => {
@@ -93,7 +106,12 @@ describe('BooksService', () => {
       await booksService.findAll({ sort: BookSort.NEWEST, page: 3, limit: 10 });
 
       expect(prisma.book.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: {}, skip: 20, take: 10, orderBy: { createdAt: 'desc' } }),
+        expect.objectContaining({
+          where: { status: 'AVAILABLE' },
+          skip: 20,
+          take: 10,
+          orderBy: { createdAt: 'desc' },
+        }),
       );
     });
 

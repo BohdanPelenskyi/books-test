@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ExchangeAction } from '@book-exchange/shared';
-import { ExchangeStatus, Prisma } from '@prisma/client';
+import { BookStatus, ExchangeStatus, Prisma } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PublicUser } from '../users/user.select';
@@ -20,8 +20,16 @@ const PARTY_SELECT = {
   avatarUrl: true,
 } satisfies Prisma.UserSelect;
 
+const BOOK_SUMMARY_SELECT = {
+  id: true,
+  name: true,
+  author: true,
+  photoUrl: true,
+} satisfies Prisma.BookSelect;
+
 const EXCHANGE_REQUEST_INCLUDE = {
-  book: { select: { id: true, name: true, author: true, photoUrl: true } },
+  book: { select: BOOK_SUMMARY_SELECT },
+  offeredBooks: { select: BOOK_SUMMARY_SELECT },
   requester: { select: PARTY_SELECT },
   owner: { select: PARTY_SELECT },
 } satisfies Prisma.ExchangeRequestInclude;
@@ -45,7 +53,9 @@ const MESSAGES = {
   bookNotFound: 'Книгу не знайдено',
   requestNotFound: 'Запит не знайдено',
   ownBook: 'Не можна запросити обмін на власну книгу',
+  bookExchanged: 'Ця книга вже обміняна',
   noBooksToOffer: 'Додайте хоча б одну книгу для обміну',
+  offeredBooksInvalid: 'Пропонувати можна лише власні доступні книги',
   duplicateRequest: 'Ви вже надсилали запит на цю книгу',
   notOwner: 'Лише власник книги може прийняти або відхилити запит',
   notRequester: 'Лише відправник може скасувати запит',
@@ -63,7 +73,7 @@ export class ExchangeRequestsService {
 
   async create(
     requester: PublicUser,
-    { bookId, message }: CreateExchangeRequestDto,
+    { bookId, message, offeredBookIds }: CreateExchangeRequestDto,
   ): Promise<ExchangeRequestView> {
     const book = await this.prisma.book.findUnique({
       where: { id: bookId },
@@ -75,15 +85,11 @@ export class ExchangeRequestsService {
     if (book.ownerId === requester.id) {
       throw new BadRequestException(MESSAGES.ownBook);
     }
-
-    const requesterBooks = await this.prisma.book.findMany({
-      where: { ownerId: requester.id },
-      select: { name: true, author: true },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (requesterBooks.length === 0) {
-      throw new BadRequestException(MESSAGES.noBooksToOffer);
+    if (book.status !== BookStatus.AVAILABLE) {
+      throw new ConflictException(MESSAGES.bookExchanged);
     }
+
+    const offeredBooks = await this.pickOfferedBooks(requester.id, offeredBookIds);
 
     const pendingDuplicate = await this.prisma.exchangeRequest.findFirst({
       where: { bookId, requesterId: requester.id, status: ExchangeStatus.PENDING },
@@ -94,7 +100,13 @@ export class ExchangeRequestsService {
     }
 
     const exchangeRequest = await this.prisma.exchangeRequest.create({
-      data: { bookId, requesterId: requester.id, ownerId: book.ownerId, message },
+      data: {
+        bookId,
+        requesterId: requester.id,
+        ownerId: book.ownerId,
+        message,
+        offeredBooks: { connect: offeredBooks.map(({ id }) => ({ id })) },
+      },
       include: EXCHANGE_REQUEST_INCLUDE,
     });
 
@@ -105,7 +117,7 @@ export class ExchangeRequestsService {
         requesterName: requester.name,
         requesterEmail: requester.email,
         desiredBook: { name: book.name, author: book.author },
-        requesterBooks,
+        requesterBooks: offeredBooks.map(({ name, author }) => ({ name, author })),
         message: message ?? null,
       }),
     );
@@ -134,14 +146,20 @@ export class ExchangeRequestsService {
 
     this.assertCanRespond(exchangeRequest, userId, action);
 
-    // Conditional on PENDING so that two concurrent responses cannot both succeed.
-    const { count } = await this.prisma.exchangeRequest.updateMany({
-      where: { id, status: ExchangeStatus.PENDING },
-      data: { status: STATUS_BY_ACTION[action] },
+    const declinedCompetitors = await this.prisma.$transaction(async (transaction) => {
+      // Conditional on PENDING so that two concurrent responses cannot both succeed.
+      const { count } = await transaction.exchangeRequest.updateMany({
+        where: { id, status: ExchangeStatus.PENDING },
+        data: { status: STATUS_BY_ACTION[action] },
+      });
+      if (count === 0) {
+        throw new ConflictException(MESSAGES.alreadyHandled);
+      }
+
+      return action === ExchangeAction.ACCEPT
+        ? this.closeBookAndDeclineCompetitors(transaction, exchangeRequest)
+        : [];
     });
-    if (count === 0) {
-      throw new ConflictException(MESSAGES.alreadyHandled);
-    }
 
     const updatedRequest = await this.prisma.exchangeRequest.findUniqueOrThrow({
       where: { id },
@@ -149,18 +167,58 @@ export class ExchangeRequestsService {
     });
 
     if (action !== ExchangeAction.CANCEL) {
-      await this.notify('exchange status', () =>
-        this.mailService.sendExchangeStatus({
-          to: updatedRequest.requester.email,
-          requesterName: updatedRequest.requester.name,
-          ownerName: updatedRequest.owner.name,
-          bookName: updatedRequest.book.name,
-          isAccepted: action === ExchangeAction.ACCEPT,
-        }),
-      );
+      await this.notifyRequester(updatedRequest, action === ExchangeAction.ACCEPT);
+    }
+    for (const competitor of declinedCompetitors) {
+      await this.notifyRequester(competitor, false);
     }
 
     return this.toViewFor(userId, updatedRequest);
+  }
+
+  /** Accepting hands the book over, so nobody else can still be waiting for it. */
+  private async closeBookAndDeclineCompetitors(
+    transaction: Prisma.TransactionClient,
+    acceptedRequest: ExchangeRequestWithParties,
+  ): Promise<ExchangeRequestWithParties[]> {
+    await transaction.book.update({
+      where: { id: acceptedRequest.book.id },
+      data: { status: BookStatus.EXCHANGED },
+    });
+
+    const competitors = await transaction.exchangeRequest.findMany({
+      where: {
+        bookId: acceptedRequest.book.id,
+        status: ExchangeStatus.PENDING,
+        id: { not: acceptedRequest.id },
+      },
+      include: EXCHANGE_REQUEST_INCLUDE,
+    });
+    if (competitors.length > 0) {
+      await transaction.exchangeRequest.updateMany({
+        where: { id: { in: competitors.map(({ id }) => id) } },
+        data: { status: ExchangeStatus.DECLINED },
+      });
+    }
+    return competitors;
+  }
+
+  private async pickOfferedBooks(requesterId: string, offeredBookIds: string[]) {
+    const availableOwnBooks = await this.prisma.book.findMany({
+      where: { ownerId: requesterId, status: BookStatus.AVAILABLE },
+      select: BOOK_SUMMARY_SELECT,
+      orderBy: { createdAt: 'desc' },
+    });
+    if (availableOwnBooks.length === 0) {
+      throw new BadRequestException(MESSAGES.noBooksToOffer);
+    }
+
+    const uniqueIds = new Set(offeredBookIds);
+    const offeredBooks = availableOwnBooks.filter(({ id }) => uniqueIds.has(id));
+    if (offeredBooks.length !== uniqueIds.size) {
+      throw new BadRequestException(MESSAGES.offeredBooksInvalid);
+    }
+    return offeredBooks;
   }
 
   private toViewFor(viewerId: string, request: ExchangeRequestWithParties): ExchangeRequestView {
@@ -196,6 +254,18 @@ export class ExchangeRequestsService {
     if (exchangeRequest.status !== ExchangeStatus.PENDING) {
       throw new ConflictException(MESSAGES.alreadyHandled);
     }
+  }
+
+  private notifyRequester(request: ExchangeRequestWithParties, isAccepted: boolean): Promise<void> {
+    return this.notify('exchange status', () =>
+      this.mailService.sendExchangeStatus({
+        to: request.requester.email,
+        requesterName: request.requester.name,
+        ownerName: request.owner.name,
+        bookName: request.book.name,
+        isAccepted,
+      }),
+    );
   }
 
   /** Mail problems must never fail the request the user has already saved. */

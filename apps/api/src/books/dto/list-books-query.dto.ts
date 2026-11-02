@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { BookAvailability } from '@book-exchange/shared';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { Trim } from '../../common/transforms/trim.transform';
 import { BookSort } from '../book-sort';
@@ -18,6 +19,15 @@ export class ListBooksQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsUUID()
   excludeOwnerId?: string;
+
+  @ApiPropertyOptional({
+    enum: Object.values(BookAvailability),
+    default: BookAvailability.AVAILABLE,
+    description: 'Hide books that were already exchanged unless set to `all`',
+  })
+  @IsOptional()
+  @IsIn(Object.values(BookAvailability))
+  availability?: BookAvailability;
 
   @ApiPropertyOptional({ enum: Object.values(BookSort), default: BookSort.NEWEST })
   @IsOptional()
