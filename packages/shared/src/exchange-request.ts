@@ -28,6 +28,7 @@ export interface ExchangeRequest {
   message: string | null;
   createdAt: string;
   book: ExchangeRequestBook;
+  offeredBooks: ExchangeRequestBook[];
   requester: ExchangeParty;
   owner: ExchangeParty;
 }

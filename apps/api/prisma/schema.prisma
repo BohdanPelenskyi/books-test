@@ -12,6 +12,11 @@ enum Role {
   ADMIN
 }
 
+enum BookStatus {
+  AVAILABLE
+  EXCHANGED
+}
+
 enum ExchangeStatus {
   PENDING
   ACCEPTED
@@ -26,6 +31,8 @@ model User {
   passwordHash        String
   role                Role                 @default(USER)
   avatarUrl           String?
+  // Bumped on every password change so tokens issued before it stop working.
+  tokenVersion        Int                  @default(0)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   books               Book[]
@@ -39,27 +46,31 @@ model Book {
   name             String
   author           String
   photoUrl         String?
+  status           BookStatus        @default(AVAILABLE)
   ownerId          String
   owner            User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   createdAt        DateTime          @default(now())
   exchangeRequests ExchangeRequest[]
+  offeredIn        ExchangeRequest[] @relation("OfferedBooks")
 
+  @@index([status])
   @@index([name])
   @@index([author])
   @@index([ownerId])
 }
 
 model ExchangeRequest {
-  id          String         @id @default(uuid())
-  bookId      String
-  book        Book           @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  requesterId String
-  requester   User           @relation("SentRequests", fields: [requesterId], references: [id], onDelete: Cascade)
-  ownerId     String
-  owner       User           @relation("ReceivedRequests", fields: [ownerId], references: [id], onDelete: Cascade)
-  message     String?
-  status      ExchangeStatus @default(PENDING)
-  createdAt   DateTime       @default(now())
+  id           String         @id @default(uuid())
+  bookId       String
+  book         Book           @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  requesterId  String
+  requester    User           @relation("SentRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+  ownerId      String
+  owner        User           @relation("ReceivedRequests", fields: [ownerId], references: [id], onDelete: Cascade)
+  message      String?
+  offeredBooks Book[]         @relation("OfferedBooks")
+  status       ExchangeStatus @default(PENDING)
+  createdAt    DateTime       @default(now())
 
   @@index([ownerId, status])
 }
