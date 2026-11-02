@@ -53,6 +53,9 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
+      - name: Generate the Prisma client
+        run: pnpm --filter @book-exchange/api exec prisma generate
+
       - name: Lint
         run: pnpm lint
 
@@ -104,6 +107,9 @@ jobs:
         run: pnpm install --frozen-lockfile
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+      - name: Generate the Prisma client
+        run: pnpm --filter @book-exchange/api exec prisma generate
 
       - name: Install the browser
         run: pnpm --filter @book-exchange/e2e exec playwright install --with-deps chromium
