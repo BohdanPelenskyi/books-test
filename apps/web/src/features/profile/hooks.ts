@@ -1,6 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { authKeys } from '@/features/auth/hooks';
 import { useIsClient } from '@/lib/use-is-client';
@@ -41,8 +42,18 @@ export function useUpdateProfile() {
 }
 
 export function useChangePassword() {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const logout = useAuthStore((state) => state.logout);
+
   return useMutation({
     mutationFn: changePassword,
-    onSuccess: () => toast.success('Пароль змінено'),
+    // The API invalidates every token issued before the change, this session included.
+    onSuccess: () => {
+      logout();
+      queryClient.clear();
+      toast.success('Пароль змінено. Увійдіть з новим паролем');
+      router.replace('/login');
+    },
   });
 }
