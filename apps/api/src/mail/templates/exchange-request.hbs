@@ -1,0 +1,25 @@
+<div style="font-family: Arial, sans-serif; color: #0f172a; max-width: 560px; margin: 0 auto;">
+  <h2 style="margin-bottom: 8px;">Новий запит на обмін</h2>
+  <p>Привіт, {{ownerName}}!</p>
+  <p>
+    <strong>{{requesterName}}</strong>
+    (<a href="mailto:{{requesterEmail}}">{{requesterEmail}}</a>)
+    хоче обміняти книгу на вашу «{{desiredBook.name}}» — {{desiredBook.author}}.
+  </p>
+  {{#if message}}
+    <blockquote style="margin: 16px 0; padding: 8px 16px; border-left: 4px solid #4f46e5; background: #f8fafc;">
+      {{message}}
+    </blockquote>
+  {{/if}}
+  <p>Книги, які пропонує {{requesterName}}:</p>
+  <ul>
+    {{#each requesterBooks}}
+      <li>{{this.name}} — {{this.author}}</li>
+    {{/each}}
+  </ul>
+  <p style="margin-top: 24px;">
+    <a href="{{exchangesUrl}}" style="display: inline-block; padding: 10px 20px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 8px;">
+      Переглянути запит
+    </a>
+  </p>
+</div>

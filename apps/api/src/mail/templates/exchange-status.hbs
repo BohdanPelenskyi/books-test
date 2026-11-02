@@ -1,0 +1,16 @@
+<div style="font-family: Arial, sans-serif; color: #0f172a; max-width: 560px; margin: 0 auto;">
+  <h2 style="margin-bottom: 8px;">
+    {{#if isAccepted}}Запит на обмін прийнято{{else}}Запит на обмін відхилено{{/if}}
+  </h2>
+  <p>Привіт, {{requesterName}}!</p>
+  <p>
+    {{ownerName}}
+    {{#if isAccepted}}прийняв(-ла){{else}}відхилив(-ла){{/if}}
+    ваш запит на книгу «{{bookName}}».
+  </p>
+  <p style="margin-top: 24px;">
+    <a href="{{exchangesUrl}}" style="display: inline-block; padding: 10px 20px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 8px;">
+      Мої обміни
+    </a>
+  </p>
+</div>
