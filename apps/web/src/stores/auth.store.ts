@@ -34,9 +34,13 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'book-exchange-auth',
       partialize: ({ token, user }) => ({ token, user }),
+      // The cookie only mirrors the stored session for the route middleware. A cookie without a
+      // stored session would make /login and /register bounce back to /books, so drop it.
       onRehydrateStorage: () => (state) => {
         if (state?.token) {
           setAccessTokenCookie(state.token);
+        } else {
+          clearAccessTokenCookie();
         }
       },
     },

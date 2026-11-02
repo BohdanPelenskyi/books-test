@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { RedirectIfSignedIn } from '@/features/auth/components/RedirectIfSignedIn';
 import { RegisterForm } from '@/features/auth/components/RegisterForm';
 import { DEFAULT_REDIRECT_PATH, getSafeRedirectPath } from '@/lib/safe-redirect';
 
@@ -16,5 +17,10 @@ export default async function RegisterPage({
       ? '/login'
       : `/login?redirect=${encodeURIComponent(redirectTo)}`;
 
-  return <RegisterForm redirectTo={redirectTo} loginHref={loginHref} />;
+  return (
+    <>
+      <RedirectIfSignedIn redirectTo={redirectTo} />
+      <RegisterForm redirectTo={redirectTo} loginHref={loginHref} />
+    </>
+  );
 }
