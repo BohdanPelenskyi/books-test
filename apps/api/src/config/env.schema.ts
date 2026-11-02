@@ -6,6 +6,10 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().min(1),
   WEB_URL: z.string().url(),
   API_PUBLIC_URL: z.string().url().default('http://localhost:4000'),
+  DISABLE_RATE_LIMITING: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
   PORT: z.coerce.number().int().positive().default(4000),
   SMTP_HOST: z.string().min(1),
   SMTP_PORT: z.coerce.number().int().positive(),
