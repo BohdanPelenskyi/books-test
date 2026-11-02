@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: book_exchange
+          POSTGRES_PASSWORD: book_exchange
+          POSTGRES_DB: book_exchange
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U book_exchange"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://book_exchange:book_exchange@localhost:5432/book_exchange?schema=public
+      E2E_DATABASE_URL: postgresql://book_exchange:book_exchange@localhost:5432/book_exchange?schema=public
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Apply database migrations
+        run: pnpm --filter @book-exchange/api exec prisma migrate deploy
+
+      - name: Test (unit and e2e)
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
