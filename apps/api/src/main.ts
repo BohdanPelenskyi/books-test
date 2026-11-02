@@ -4,6 +4,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { API_PREFIX, applyGlobalSetup } from './app.setup';
+import { buildAllowedOrigins } from './common/cors';
 import type { Env } from './config/env.schema';
 
 const SWAGGER_PATH = `${API_PREFIX}/docs`;
@@ -15,7 +16,7 @@ async function bootstrap(): Promise<void> {
   applyGlobalSetup(app);
   // Uploaded covers are public images that the web app (another origin) embeds.
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-  app.enableCors({ origin: config.get('WEB_URL', { infer: true }) });
+  app.enableCors({ origin: buildAllowedOrigins(config.get('WEB_URL', { infer: true })) });
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Book Exchange API')
