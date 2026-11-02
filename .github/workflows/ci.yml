@@ -166,6 +166,13 @@ jobs:
           docker compose --profile app logs
           exit 1
 
+      - name: Seed the database with the command from the README
+        run: docker compose --profile app exec -T api pnpm exec prisma db seed
+
+      - name: Sign in as a seeded user
+        run: |
+          curl -sf -X POST http://localhost:4000/api/auth/login \n            -H "content-type: application/json" \n            -d '{"email":"anna@example.com","password":"User123!"}' > /dev/null
+
       - name: Show the health response
         run: curl -s http://localhost:4000/api/health
 
